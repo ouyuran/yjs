@@ -18,7 +18,7 @@ import {
   transact,
   ArraySearchMarker, UpdateDecoderV1, UpdateDecoderV2, UpdateEncoderV1, UpdateEncoderV2, Doc, Transaction, Item // eslint-disable-line
 } from '../internals.js'
-import { typeListSlice } from './AbstractType.js'
+import { typeListInsertGenericsRDSL, typeListSlice } from './AbstractType.js'
 
 /**
  * Event that describes the changes on a YArray
@@ -143,6 +143,32 @@ export class YArray extends AbstractType {
     if (this.doc !== null) {
       transact(this.doc, transaction => {
         typeListInsertGenerics(transaction, this, index, /** @type {any} */ (content))
+      })
+    } else {
+      /** @type {Array<any>} */ (this._prelimContent).splice(index, 0, ...content)
+    }
+  }
+
+  /**
+   * Inserts new content at an index.
+   *
+   * Important: This function expects an array of content. Not just a content
+   * object. The reason for this "weirdness" is that inserting several elements
+   * is very efficient when it is done as a single operation.
+   *
+   * @example
+   *  // Insert character 'a' at position 0
+   *  yarray.insert(0, ['a'])
+   *  // Insert numbers 1, 2 at position 1
+   *  yarray.insert(1, [1, 2])
+   *
+   * @param {number} index The index to insert content at.
+   * @param {Array<T>} content The array of content
+   */
+  insertRDSL (index, content) {
+    if (this.doc !== null) {
+      transact(this.doc, transaction => {
+        typeListInsertGenericsRDSL(transaction, this, index, /** @type {any} */ (content))
       })
     } else {
       /** @type {Array<any>} */ (this._prelimContent).splice(index, 0, ...content)

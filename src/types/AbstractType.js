@@ -18,6 +18,7 @@ import * as map from 'lib0/map'
 import * as iterator from 'lib0/iterator'
 import * as error from 'lib0/error'
 import * as math from 'lib0/math'
+import { RDSLHeadNode, RDSLPath, RDSLPosition, RDSLWalker } from './RDSL.js'
 
 const maxSearchMarker = 80
 
@@ -80,6 +81,26 @@ const markPosition = (searchMarker, p, index) => {
     searchMarker.push(pm)
     return pm
   }
+}
+
+/**
+ * Find position with RDSL identifier structure.
+ *
+ * @param {AbstractType<any>} yarray
+ * @param {number} index
+ * @return {RDSLPosition}
+ */
+export const rdslFindPosition = (yarray, index) => {
+  const walker = new RDSLWalker(yarray._rdslHead, index)
+  try {
+    while(!walker.finish()) {
+      walker.shouldGoRight() ? walker.goRight() : walker.goDown()
+    }
+  } catch (e) {
+    console.error(e)
+  }
+  
+  return new RDSLPosition(walker.posLeft, walker.path)
 }
 
 /**
@@ -285,6 +306,29 @@ export class AbstractType {
      * @type {null | Array<ArraySearchMarker>}
      */
     this._searchMarker = null
+    /**
+     * @type {RDSLHeadNode}
+     */
+    this._rdslHead = new RDSLHeadNode(this._start)
+  }
+
+  print() {
+    const out = []
+    const level = this._rdslHead.headLevel;
+    for (let i = level; i >= 0; i--) {
+      const out = [];
+      let current = this._start;
+      while(current) {
+        if(i > 0) {
+          out.push(current.rdslNode?.getDistance(i))
+        } else {
+          const r = current.content.getContent().join(',')
+          out.push(r)
+        }
+        current = current.right;
+      }
+      console.log(out.map(x => (x ?? '').toString().padStart(9, ' ')).join(' '))
+    }
   }
 
   /**
@@ -624,11 +668,16 @@ export const typeListGet = (type, index) => {
  * @param {AbstractType<any>} parent
  * @param {Item?} referenceItem
  * @param {Array<Object<string,any>|Array<any>|boolean|number|null|string|Uint8Array>} content
- *
+ * @return {Array<Item>}
+ * 
  * @private
  * @function
  */
 export const typeListInsertGenericsAfter = (transaction, parent, referenceItem, content) => {
+  /**
+   * @type {Array<Item>}
+   */
+  const newItems = []
   let left = referenceItem
   const doc = transaction.doc
   const ownClientId = doc.clientID
@@ -642,6 +691,7 @@ export const typeListInsertGenericsAfter = (transaction, parent, referenceItem, 
     if (jsonContent.length > 0) {
       left = new Item(createID(ownClientId, getState(store, ownClientId)), left, left && left.lastId, right, right && right.id, parent, null, new ContentAny(jsonContent))
       left.integrate(transaction, 0)
+      newItems.push(left)
       jsonContent = []
     }
   }
@@ -664,15 +714,18 @@ export const typeListInsertGenericsAfter = (transaction, parent, referenceItem, 
             case ArrayBuffer:
               left = new Item(createID(ownClientId, getState(store, ownClientId)), left, left && left.lastId, right, right && right.id, parent, null, new ContentBinary(new Uint8Array(/** @type {Uint8Array} */ (c))))
               left.integrate(transaction, 0)
+              newItems.push(left)
               break
             case Doc:
               left = new Item(createID(ownClientId, getState(store, ownClientId)), left, left && left.lastId, right, right && right.id, parent, null, new ContentDoc(/** @type {Doc} */ (c)))
               left.integrate(transaction, 0)
+              newItems.push(left)
               break
             default:
               if (c instanceof AbstractType) {
                 left = new Item(createID(ownClientId, getState(store, ownClientId)), left, left && left.lastId, right, right && right.id, parent, null, new ContentType(c))
                 left.integrate(transaction, 0)
+                newItems.push(left)
               } else {
                 throw new Error('Unexpected content type in insert operation')
               }
@@ -681,6 +734,7 @@ export const typeListInsertGenericsAfter = (transaction, parent, referenceItem, 
     }
   })
   packJsonContent()
+  return newItems
 }
 
 const lengthExceeded = error.create('Length exceeded!')
@@ -733,6 +787,79 @@ export const typeListInsertGenerics = (transaction, parent, index, content) => {
     updateMarkerChanges(parent._searchMarker, startIndex, content.length)
   }
   return typeListInsertGenericsAfter(transaction, parent, n, content)
+}
+
+/**
+ * @param {Transaction} transaction
+ * @param {AbstractType<any>} parent
+ * @param {number} index
+ * @param {Array<Object<string,any>|Array<any>|number|null|string|Uint8Array>} content
+ *
+ * @private
+ * @function
+ */
+export const typeListInsertGenericsRDSL = (transaction, parent, index, content) => {
+  if (index > parent._length) {
+    throw lengthExceeded
+  }
+  // if (index === 0) {
+  //   if (parent._searchMarker) {
+  //     updateMarkerChanges(parent._searchMarker, index, content.length)
+  //   }
+  //   return typeListInsertGenericsAfter(transaction, parent, null, content)
+  // }
+  // const startIndex = index
+  // const marker = findMarker(parent, index)
+  // let n = parent._start
+  // if (marker !== null) {
+  //   n = marker.p
+  //   index -= marker.index
+  //   // we need to iterate one to the left so that the algorithm works
+  //   if (index === 0) {
+  //     // @todo refactor this as it actually doesn't consider formats
+  //     n = n.prev // important! get the left undeleted item so that we can actually decrease index
+  //     index += (n && n.countable && !n.deleted) ? n.length : 0
+  //   }
+  // }
+  // for (; n !== null; n = n.right) {
+  //   if (!n.deleted && n.countable) {
+  //     if (index <= n.length) {
+  //       if (index < n.length) {
+  //         // insert in-between
+  //         getItemCleanStart(transaction, createID(n.id.client, n.id.clock + index))
+  //       }
+  //       break
+  //     }
+  //     index -= n.length
+  //   }
+  // }
+  // if (parent._searchMarker) {
+  //   updateMarkerChanges(parent._searchMarker, startIndex, content.length)
+  // }
+  let newItems = [];
+  const {n, posLeft, path} = rdslFindPosition(parent, index)
+  if (index === 0) {
+    newItems = typeListInsertGenericsAfter(transaction, parent, null, content)
+    if (newItems[0] && newItems[0].left === null) {
+      parent._rdslHead.dataNode = newItems[0]
+    }
+    path.nodes[0] = null;
+    path.distances[0] = 0;
+  } else {
+    if (posLeft < 0) {
+      const originDis = n.getDistance()
+      const originRight = n.getRight()
+      getItemCleanStart(transaction, createID(n.id.client, n.id.clock + n.getDistance() + posLeft))
+      path.handleUpdate(n.getDistance() - originDis)
+      const currentRight = n.getRight()
+      if(currentRight !== originRight && currentRight !== null) {
+        path.handleInsert([currentRight])
+      }
+    }
+    // console.log('==> insert ' + content + ' after ' + n.content.getContent())
+    newItems = typeListInsertGenericsAfter(transaction, parent, n, content)
+  }
+  path.handleInsert(newItems)
 }
 
 /**

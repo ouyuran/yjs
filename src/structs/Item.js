@@ -29,6 +29,8 @@ import {
 import * as error from 'lib0/error'
 import * as binary from 'lib0/binary'
 import * as array from 'lib0/array'
+import { RDSLNode } from '../types/RDSL.js'
+import nodeTest from 'node:test'
 
 /**
  * @todo This should return several items
@@ -307,6 +309,10 @@ export class Item extends AbstractStruct {
      * @type {number} byte
      */
     this.info = this.content.isCountable() ? binary.BIT2 : 0
+    /**
+     * @type {RDSLNode | null}
+     */
+    this.rdslNode = null
   }
 
   /**
@@ -357,6 +363,23 @@ export class Item extends AbstractStruct {
 
   markDeleted () {
     this.info |= binary.BIT3
+  }
+
+  getDistance () {
+    return (this.countable && !this.deleted) ? this.length : 0;
+  }
+
+  getRight () {
+    return this.right;
+  }
+
+  getRightDistance() {
+    if (this.getRight() === null) {
+      return Number.MAX_SAFE_INTEGER;
+    } else {
+      // @ts-ignore
+      return this.getRight().getDistance();
+    }
   }
 
   /**
@@ -581,19 +604,20 @@ export class Item extends AbstractStruct {
       this.content.constructor === right.content.constructor &&
       this.content.mergeWith(right.content)
     ) {
-      const searchMarker = /** @type {AbstractType<any>} */ (this.parent)._searchMarker
-      if (searchMarker) {
-        searchMarker.forEach(marker => {
-          if (marker.p === right) {
-            // right is going to be "forgotten" so we need to update the marker
-            marker.p = this
-            // adjust marker index
-            if (!this.deleted && this.countable) {
-              marker.index -= this.length
-            }
-          }
-        })
-      }
+      // const searchMarker = /** @type {AbstractType<any>} */ (this.parent)._searchMarker
+      // if (searchMarker) {
+      //   searchMarker.forEach(marker => {
+      //     if (marker.p === right) {
+      //       // right is going to be "forgotten" so we need to update the marker
+      //       marker.p = this
+      //       // adjust marker index
+      //       if (!this.deleted && this.countable) {
+      //         marker.index -= this.length
+      //       }
+      //     }
+      //   })
+      // }
+      
       if (right.keep) {
         this.keep = true
       }
@@ -602,6 +626,10 @@ export class Item extends AbstractStruct {
         this.right.left = this
       }
       this.length += right.length
+      if (right.rdslNode) {
+        right.rdslNode.remove()
+        right.rdslNode = null
+      }
       return true
     }
     return false
