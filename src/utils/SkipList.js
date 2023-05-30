@@ -58,7 +58,6 @@ export class SkipList {
       const data = datas[i]
       const left = path?.get(0)
       if (path === null || !this.isPathUsable(path, data)) {
-        console.log("new retrieve for " + data)
         path = new SkipListWalker(this).retrieve(data)
       }
       this.doInsert(path, datas[i])
