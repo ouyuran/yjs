@@ -158,7 +158,6 @@ export const testInsertMultiItemInRandomOrder = (tc) => {
  */
 export const testInsertMultiItemEdgeCase = (tc) => {
   const list = new SkipList(1 / 2, compareItems)
-  let array = new Array()
   const i1 = new Item(1)
   const i2 = new Item(2)
   const i2_2 = new Item(2)

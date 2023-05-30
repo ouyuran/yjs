@@ -38,30 +38,34 @@ export class SkipList {
 
   /**
    * @param {T} data
+   * @return {DataNode<T>}
    */
   insertOne(data) {
     const path = new SkipListWalker(this).retrieve(data)
-    this.doInsert(path, data)
+    return this.doInsert(path, data)
   }
 
   /**
    * Insert multiple datas
    * Tend to run as less retrieve as possible
    * @param {Array<T>} datas
+   * @return {Array<DataNode<T>>}
    */
   insertMulti(datas) {
     if (datas.length === 0) {
-      return
+      return []
     }
     let path = null
+    const out = []
     for (let i = datas.length - 1; i >= 0; i--) {
       const data = datas[i]
       const left = path?.get(0)
       if (path === null || !this.isPathUsable(path, data)) {
         path = new SkipListWalker(this).retrieve(data)
       }
-      this.doInsert(path, datas[i])
+      out.push(this.doInsert(path, datas[i]))
     }
+    return out
   }
 
   /**
@@ -84,6 +88,7 @@ export class SkipList {
   /**
    * @param {SkipListPath<T>} path
    * @param {T} data
+   * @return {DataNode<T>}
    */
   doInsert(path, data) {
     const dataNode = new DataNode(data)
@@ -98,6 +103,8 @@ export class SkipList {
         ).setRight(skipListNode, i)
       }
     }
+
+    return dataNode
   }
 
   toArray() {
